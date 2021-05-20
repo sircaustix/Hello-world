@@ -1,0 +1,17 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		"files.associations": {
+			"vector": "cpp",
+			"iosfwd": "cpp",
+			"iterator": "cpp",
+			"*.tcc": "cpp",
+			"numeric": "cpp",
+			"ranges": "cpp"
+		}
+	}
+}
