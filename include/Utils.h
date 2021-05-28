@@ -7,6 +7,7 @@ public:
     static Eigen::MatrixXd cov(Eigen::MatrixXd, bool rowvar = true);
     static Eigen::MatrixXcd eigenDecomposition(Eigen::MatrixXd, Eigen::VectorXcd &eigenValues);
     static cv::Mat convertRGBToOD(cv::Mat);
+    static void convertRGBToOD(cv::Mat, cv::Mat &);
     static cv::Mat convertODToRGB(cv::Mat);
     static cv::Mat getTissueMask(cv::Mat, double luminosity_threshold = 0.8);
     static Eigen::MatrixXd convertToEigenFormat(cv::Mat);

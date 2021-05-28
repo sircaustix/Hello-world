@@ -6,6 +6,8 @@
 #include <opencv2/core/eigen.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
 #include <vector>
+#include <thread>
+const int NUM_THREADS = std::thread::hardware_concurrency();
 namespace ColourStainNormalization
 {
     class Utils;

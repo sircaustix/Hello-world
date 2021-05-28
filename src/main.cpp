@@ -11,7 +11,6 @@
 #include <iostream>
 #include <string>
 #include <vector>
-#include <filesystem>
 #include <MacenkoNormalizer.h>
 #include <VahadaneNormalizer.h>
 #include <ReinhardNormalizer.h>
@@ -22,10 +21,10 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <string.h>
-#include <thread>
 using namespace std;
 using namespace ColourStainNormalization;
 #if __cplusplus == 201703L
+#include <filesystem>
 namespace fs = std::filesystem;
 #endif
 /**
@@ -50,14 +49,21 @@ void exit_with_help()
     cerr << "-l all to convert all files or comma separated list of files like img1.jpg, img2.jpg" << endl;
     cerr << "-m normalization mode, m(Macenko), v(Vahadane) or r(Reinhard)" << endl;
 }
-const int VAHADANE = 0;
-const int MACENKO = 1;
-const int REINHARD = 2;
-const int NUM_THREADS = std::thread::hardware_concurrency();
+struct DataUnit
+{
+    public:
+    cv::Mat inputImage;
+    std::string fileName;
+    cv::Mat outputImage;
+    ~DataUnit(){
+        inputImage.release();
+        outputImage.release();
+    }
+};
+static std::optional<DataUnit> test() { return std::nullopt; }
 int main(int argc, char *argv[])
 {
-    //std::unique_ptr<Normalizer> _normalizer = static_cast<std::unique_ptr<Normalizer>>(MacenkoNormalizer::New().get());
-    //Normalizer &_normalizer;
+    std::unique_ptr<Normalizer> p_normalizer = VahadaneNormalizer::New();
     std::string dirName = "../src/";
     std::string outputDir = "./";
     std::string referenceImageName;
@@ -67,16 +73,13 @@ int main(int argc, char *argv[])
     std::string outputdir;
     vector<string> fileList;
     bool invalidMode = false;
-    int stainMode = VAHADANE;
     bool helpMode = false;
+    
     if (argc < 3)
     {
         exit_with_help();
         return EXIT_SUCCESS;
     }
-    //cout << "The number of arguments = " << argc << "\n";
-    //for(int i = 0; i < argc; i++)
-    //    cout << argv[i] << "\n";
     for (int i = 1; i < argc; i++)
     {
         if (argv[i][0] != '-')
@@ -94,7 +97,7 @@ int main(int argc, char *argv[])
             break;
         case 'r':
             referenceImageName = argv[i];
-            cout << "Test"
+            cout << "Target"
                  << " " << referenceImageName << endl;
             break;
         case 'd':
@@ -115,17 +118,20 @@ int main(int argc, char *argv[])
             cout << "Mode:" << mode << endl;
             if (tolower(argv[i][0]) == 'm')
             {
-                stainMode = MACENKO;
+                p_normalizer = MacenkoNormalizer::New();
+                outputDir+="_Macenko";
                 break;
             }
             if (tolower(argv[i][0]) == 'v')
             {
-                stainMode = VAHADANE;
+                p_normalizer = VahadaneNormalizer::New();
+                outputDir+="_Vahadane";
                 break;
             }
             if (tolower(argv[i][0]) == 'r')
             {
-                stainMode = REINHARD;
+                p_normalizer = ReinhardNormalizer::New();
+                outputDir+="_Reinhard";
                 break;
             }
             invalidMode = true;
@@ -137,6 +143,14 @@ int main(int argc, char *argv[])
     if (helpMode)
     {
         return EXIT_SUCCESS;
+    }
+    if (invalidMode)
+    {
+        cerr << "Invalid Normalization Method specified"
+             << "\n";
+        cerr << "Valid Choices are m: Macenko, v: Vahadane, r: Reinhard"
+             << "\n";
+        return EXIT_FAILURE;
     }
     DIR *dir;
     if ((dir = opendir(dirName.c_str())) == NULL)
@@ -152,95 +166,39 @@ int main(int argc, char *argv[])
             return EXIT_FAILURE;
         }
     }
-    if (invalidMode)
-    {
-        cerr << "Invalid Normalization Method specified"
-             << "\n";
-        cerr << "Valid Choices are m: Macenko, v: Vahadane, r: Reinhard"
-             << "\n";
-        return EXIT_FAILURE;
-    }
+    
     parseList(dirName, file_list, fileList);
 
     cv::Mat image = cv::imread(referenceImageName); //
+    int size = fileList.size();
+    std::vector<DataUnit> imageList;
+    for(int i = 0; i < size; i++)
+    {
+        DataUnit du;
+        du.fileName = fileList.at(i);
+        du.inputImage = cv::imread(dirName + "/" + (du.fileName));
+        imageList.push_back(du);
+    }
     auto start = chrono::steady_clock::now();
-
-    if (VAHADANE == stainMode)
+    p_normalizer->fit(image);
+    #pragma omp parallel num_threads(NUM_THREADS << 1)
     {
-        cerr << "Vahadane" << endl;
-        VahadaneNormalizer normalizer = VahadaneNormalizer::init();
-        normalizer.fit(image);
-#pragma omp parallel num_threads(NUM_THREADS << 1)
+        #pragma omp for
+        for(int i = 0; i < size; i++)
         {
-#pragma omp for
-            for (vector<string>::iterator itr = fileList.begin(); itr != fileList.end(); ++itr)
-            {
-                // cout << dirName+"/"+(*itr) << "\n";
-                cv::Mat image2 = cv::imread(dirName + "/" + (*itr));
-                cv::Mat output;
-                normalizer.transform(image2, output);
-                imwrite(outputDir + "/" + (*itr), output);
-                image2.release();
-                output.release();
-            }
+            p_normalizer->transform(imageList.at(i).inputImage, imageList.at(i).outputImage);
         }
-        auto end = chrono::steady_clock::now();
-        cout << "Total Time Taken:(ms) ";
-        cout << chrono::duration_cast<chrono::milliseconds>(end - start).count() << endl;
-        cout << "Average Time Taken:(ms) ";
-        cout << chrono::duration_cast<chrono::milliseconds>(end - start).count() / fileList.size() << endl;
-        return EXIT_SUCCESS;
     }
-    if (MACENKO == stainMode)
-    {
-        cerr << "Macenko" << endl;
-        MacenkoNormalizer normalizer = MacenkoNormalizer::init();
-        normalizer.fit(image);
-
-#pragma omp parallel num_threads(NUM_THREADS << 1)
-#pragma omp for
-        for (vector<string>::iterator itr = fileList.begin(); itr != fileList.end(); ++itr)
-        {
-            cout << dirName + "/" + (*itr) << "\n";
-            cv::Mat image2 = cv::imread(dirName + "/" + (*itr));
-            cv::Mat output;
-            normalizer.transform(image2, output);
-            imwrite(outputDir + "/" + (*itr), output);
-            image2.release();
-            output.release();
-        }
-        auto end = chrono::steady_clock::now();
-        cout << "Total Time Taken:(ms) ";
-        cout << chrono::duration_cast<chrono::milliseconds>(end - start).count() << endl;
-        cout << "Average Time Taken:(ms) ";
-        cout << chrono::duration_cast<chrono::milliseconds>(end - start).count() / fileList.size() << endl;
-        return EXIT_SUCCESS;
+    auto end = chrono::steady_clock::now();
+    cout << "Total Time Taken:(ms) ";
+    cout << chrono::duration_cast<chrono::milliseconds>(end - start).count() << endl;
+    cout << "Average Time Taken:(ms) ";
+    cout << chrono::duration_cast<chrono::milliseconds>(end - start).count() / fileList.size() << endl;
+    for(int i = 0; i < size; i++){
+        DataUnit du = imageList.at(i);
+        imwrite(outputDir + "/" + (du.fileName), du.outputImage);
     }
-    if (REINHARD == stainMode)
-    {
-        cerr << "Reinhard" << endl;
-        ReinhardNormalizer normalizer = ReinhardNormalizer::init();
-        normalizer.fit(image);
-#pragma omp parallel num_threads(NUM_THREADS << 1)
-#pragma omp for
-        for (vector<string>::iterator itr = fileList.begin(); itr != fileList.end(); ++itr)
-        {
-            cout << dirName + "/" + (*itr) << "\n";
-            cv::Mat image2 = cv::imread(dirName + "/" + (*itr));
-            cv::Mat output;
-            normalizer.transform(image2, output);
-            imwrite(outputDir + "/" + (*itr), output);
-            image2.release();
-            output.release();
-        }
-        auto end = chrono::steady_clock::now();
-        // cout<<"Total Time Taken:(ms) ";
-        cout << chrono::duration_cast<chrono::milliseconds>(end - start).count() << endl;
-        cout << "Average Time Taken:(ms) ";
-        cout << chrono::duration_cast<chrono::milliseconds>(end - start).count() / fileList.size() << endl;
-        return EXIT_SUCCESS;
-    }
-    return 0;
+    return EXIT_SUCCESS;
 }
 void getFilesList(std::string dirName, std::vector<string> &fileList)
 {

@@ -602,7 +602,7 @@ void Trainer<T>::train(const Data<T>& X, const ParamDictLearn<T>& param) {
          AT[numT].rank1Update(spcoeffj);
          BT[numT].rank1Update(Xj,spcoeffj);
       }
-
+      cout << "Iter Update " << param.iter_updateD << "\n";
       if (param.batch) {
          _A.setZeros();
          _B.setZeros();

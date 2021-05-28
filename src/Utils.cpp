@@ -1,14 +1,16 @@
 #include <iostream>
 #include "Utils.h"
+#include <NumCpp.hpp>
 #include <spams.h>
 #include <omp.h>
+//#include <NumCpp.hpp>
 using namespace std;
 const double ColourStainNormalization::Utils::THRESHOLD = 1e-6;
 template <typename T>
 SpMatrix<T> *cppLasso(Matrix<T> &X, Matrix<T> &D, Matrix<T> **path, bool return_reg_path,
                       int L, const T constraint, const T lambda2 = 0., constraint_type mode = PENALTY,
                       const bool pos = true, const bool ols = false, const int numThreads = -1,
-                      int max_length_path = -1, const bool verbose = true, bool cholevsky = false)
+                      int max_length_path = -1, const bool verbose = false, bool cholevsky = false)
 {
     return _lassoD(&X, &D, path, return_reg_path, L, constraint, lambda2, mode, pos, ols, numThreads,
                    max_length_path, verbose, cholevsky);
@@ -59,6 +61,30 @@ cv::Mat ColourStainNormalization::Utils::convertRGBToOD(cv::Mat I)
     mask.release();
     diff.release();
     return OD;
+}
+void ColourStainNormalization::Utils::convertRGBToOD(cv::Mat I, cv::Mat &OD)
+{
+    cv::Mat I_Double = cv::Mat::zeros(I.size(), CV_64FC3);
+    cv::Mat mask = cv::Mat::zeros(I.size(), I.type());
+    cv::Mat diff;
+    cv::compare(I, mask, diff, cv::CmpTypes::CMP_EQ);
+    diff = diff / 255;
+    OD = I + diff;
+    OD.convertTo(OD, CV_64FC3);
+    //cout << OD.type() << endl;
+    OD /= 255.0;
+    cv::log(OD, OD);
+    OD *= -1;
+    diff.release();
+    mask.release();
+    mask = cv::Mat(OD.size(), OD.type(), cv::Scalar(THRESHOLD, THRESHOLD, THRESHOLD));
+    cv::compare(OD, mask, diff, cv::CmpTypes::CMP_LT);
+    diff.convertTo(diff, CV_64FC3);
+    diff /= 255.0;
+    diff *= THRESHOLD;
+    OD += diff;
+    mask.release();
+    diff.release();
 }
 cv::Mat ColourStainNormalization::Utils::convertODToRGB(cv::Mat OD)
 {
@@ -140,10 +166,26 @@ Eigen::MatrixXd ColourStainNormalization::Utils::convertToEigenFormat(cv::Mat im
 }
 double ColourStainNormalization::Utils::computePercentile(std::vector<double> sortedVector, float percentile)
 {
+    // unsigned int length = sortedVector.size();
+    // float index = (percentile * length) / 100;
+    // double *sortedArray = sortedVector.data();
+    // return sortedArray[static_cast<int>(index)];
+    // float length = sortedVector.size();
+    // float index = (percentile * length) / 100;
+    // double *sortedArray = sortedVector.data();
+    // double val_lower = sortedArray[static_cast<int>(index)];
+    // double val_higher = sortedArray[static_cast<int>(index)+1];
+    // double interp = (val_higher-val_lower)*(index-static_cast<int>(index));  
+    // return val_lower+interp;
     unsigned int length = sortedVector.size();
-    float index = (percentile * length) / 100;
     double *sortedArray = sortedVector.data();
-    return sortedArray[static_cast<int>(index)];
+    nc::NdArray<double>test_array(sortedArray, length, false);
+	//test_array.print();
+	//nc::Axis::NONE/ROW/COL
+	nc::NdArray<double> _percentile = nc::percentile(test_array, percentile);
+	//percentile.print();
+    return _percentile[0];
+    // return 0.0;
 }
 
 bool ColourStainNormalization::Utils::checkIfImageValid(cv::Mat image)
@@ -175,7 +217,12 @@ void ColourStainNormalization::Utils::computeConcentrationMatrix(Eigen::MatrixXd
     Matrix<double> Dt;
     D.transpose(Dt);
     Matrix<double> *path = NULL;
+    // spams.lasso(X=OD.T, D=stain_matrix.T, mode=2, lambda1=regularizer, pos=True).toarray().T
     SpMatrix<double> *spa = cppLasso(Xt, Dt, &path, false, -1, 0.01);
+    // def lasso(X,D= None,Q = None,q = None,return_reg_path = False,L= -1,lambda1= None,lambda2= 0.,
+    //              mode= spams_wrap.PENALTY,pos= False,ols= False,numThreads= -1,
+    //              max_length_path= -1,verbose=False,cholesky= False):
+                   
     Matrix<double> alpha;
     spa->toFull(alpha);
     m = alpha.m();
@@ -183,6 +230,7 @@ void ColourStainNormalization::Utils::computeConcentrationMatrix(Eigen::MatrixXd
     double *datac = alpha.rawX();
     Eigen::Map<Eigen::MatrixXd> M(datac, m, n);
     concentrationMatrix = M.transpose();
+    delete spa;
     //cout << concentrationMatrix << endl;
 }
 void ColourStainNormalization::Utils::evaluateStainMatrix(Eigen::MatrixXd X, Eigen::MatrixXd &_stainMatrix)
@@ -194,7 +242,7 @@ void ColourStainNormalization::Utils::evaluateStainMatrix(Eigen::MatrixXd X, Eig
     params.posD = true;
     params.modeD = L2;
     params.verbose = false;
-    params.lambda2 = 0; //10e-10;
+    params.lambda2 = 10e-10;
     params.batch = false;
     params.lambda3 = 0;
     params.iter = -1;
@@ -209,7 +257,7 @@ void ColourStainNormalization::Utils::evaluateStainMatrix(Eigen::MatrixXd X, Eig
     params.gamma1 = 0;
     params.gamma2 = 0;
     params.rho = 1.0;
-    params.iter_updateD = -1;
+    params.iter_updateD = 1;
     params.stochastic = false;
     params.modeParam = static_cast<mode_compute>(0);
     params.log = false;
@@ -228,7 +276,7 @@ void ColourStainNormalization::Utils::evaluateStainMatrix(Eigen::MatrixXd X, Eig
     //cout << "Number of Threads = " << num_threads << endl;
     //cout << "Batch size = " << batch_size << endl;
     Trainer<double> t(K); // batch_size, num_threads);
-    t.train(Xmt, params);
+    t.train_fista(Xmt, params);
     Matrix<double> D;
     t.getD(D);
     Matrix<double> Dt;

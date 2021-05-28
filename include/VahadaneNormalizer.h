@@ -9,12 +9,12 @@ public:
     static ColourStainNormalization::VahadaneNormalizer init();
     void transform(cv::Mat, cv::Mat &);
     void fit(cv::Mat);
-
 protected:
     Eigen::MatrixXd stainMatrix;
     Eigen::MatrixXd concentrationMatrix;
     void computeStainMatrix(cv::Mat, Eigen::MatrixXd &_stainMatrix);
-    void computeConcentrationMatrix(cv::Mat, Eigen::MatrixXd &_concentrationMatrix);
+    void computeConcentrationMatrix(cv::Mat, const Eigen::MatrixXd _stainMatrix,  Eigen::MatrixXd &_concentrationMatrix);
+    void computeConcentrationMatrixSource(cv::Mat, Eigen::MatrixXd &_concentrationMatrix);
     VahadaneNormalizer();
 
 private:

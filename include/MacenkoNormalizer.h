@@ -14,7 +14,7 @@ protected:
     Eigen::MatrixXd stainMatrix;
     Eigen::MatrixXd concentrationMatrix;
     void computeStainMatrix(cv::Mat, Eigen::MatrixXd &_stainMatrix);
-    void computeConcentrationMatrix(cv::Mat, Eigen::MatrixXd &_concentrationMatrix);
+    void computeConcentrationMatrix(cv::Mat, const Eigen::MatrixXd _stainMatrix,Eigen::MatrixXd &_concentrationMatrix);
     MacenkoNormalizer();
     //~MacenkoNormalizer();
 

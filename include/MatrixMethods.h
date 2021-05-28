@@ -11,6 +11,6 @@ protected:
     Eigen::MatrixXd concentrationMatrix;
     double maxCT[2] = {0.0, 0.0};
     virtual void computeStainMatrix(cv::Mat, Eigen::MatrixXd &_stainMatrix) = 0;
-    virtual void computeConcentrationMatrix(cv::Mat, Eigen::MatrixXd &_concentrationMatrix) = 0;
+    virtual void computeConcentrationMatrix(cv::Mat, const Eigen::MatrixXd _stainMatrix,Eigen::MatrixXd &_concentrationMatrix) = 0;
     MatrixMethods() : Normalizer() {}
 };

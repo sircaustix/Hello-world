@@ -89,17 +89,17 @@ void ColourStainNormalization::MacenkoNormalizer::computeStainMatrix(cv::Mat ima
     _stainMatrix = HE.rowwise().normalized();
 }
 
-void ColourStainNormalization::MacenkoNormalizer::computeConcentrationMatrix(cv::Mat image, Eigen::MatrixXd &_concentrationMatrix)
+void ColourStainNormalization::MacenkoNormalizer::computeConcentrationMatrix(cv::Mat image, const Eigen::MatrixXd _stainMatrix,Eigen::MatrixXd &_concentrationMatrix)
 {
     cv::Mat OD = Utils::convertRGBToOD(image);
     Eigen::MatrixXd C = Utils::convertToEigenFormat(OD);
-    Utils::computeConcentrationMatrix(C, stainMatrix, _concentrationMatrix);
+    Utils::computeConcentrationMatrix(C, _stainMatrix, _concentrationMatrix);
 }
 
 void ColourStainNormalization::MacenkoNormalizer::fit(cv::Mat target)
 {
     computeStainMatrix(target, stainMatrix);
-    computeConcentrationMatrix(target, concentrationMatrix);
+    computeConcentrationMatrix(target, stainMatrix,concentrationMatrix);
     //Ready with target stain and computation matrices.
     int index[2];
     maxCT[0] = concentrationMatrix.col(0).maxCoeff(&index[0]);
@@ -123,7 +123,7 @@ void ColourStainNormalization::MacenkoNormalizer::transform(cv::Mat source, cv::
     Eigen::MatrixXd _stainMatrix;
     Eigen::MatrixXd _concentrationMatrix;
     computeStainMatrix(source, _stainMatrix);
-    computeConcentrationMatrix(source, _concentrationMatrix);
+    computeConcentrationMatrix(source, _stainMatrix, _concentrationMatrix);
     // cout << _concentrationMatrix << endl;
     double *data = _concentrationMatrix.col(0).data();
     vector<double> columnVectors(data, data + concentrationMatrix.rows());
