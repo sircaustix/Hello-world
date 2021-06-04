@@ -3,7 +3,6 @@
 #include <NumCpp.hpp>
 #include <spams.h>
 #include <omp.h>
-//#include <NumCpp.hpp>
 using namespace std;
 const double ColourStainNormalization::Utils::THRESHOLD = 1e-6;
 template <typename T>
@@ -110,10 +109,43 @@ cv::Mat ColourStainNormalization::Utils::convertODToRGB(cv::Mat OD)
     OD.convertTo(RGB, CV_8UC3);
     return RGB;
 }
+/*
+I_LAB = cv.cvtColor(I, cv.COLOR_RGB2LAB)
+        L_float = I_LAB[:, :, 0].astype(float)
+        p = np.percentile(L_float, percentile)
+        I_LAB[:, :, 0] = np.clip(255 * L_float / p, 0, 255).astype(np.uint8)
+        I = cv.cvtColor(I_LAB, cv.COLOR_LAB2RGB)
+        return I
+ */
+void ColourStainNormalization::Utils::standardiseLuminosity(const cv::Mat I, cv::Mat &output, float percentile)
+{
+    cv::Mat I_LAB;
+    cv::cvtColor(I, I_LAB, cv::COLOR_BGR2Lab);
+    vector<cv::Mat> channels;
+    cv::split(I_LAB, channels);
+    cv::Mat LAB_L = channels[0];
+    LAB_L.convertTo(LAB_L, CV_64FC3);
+    double min, max;
+    cv::minMaxLoc(LAB_L, &min, &max);
+    // int size = LAB_L.rows * LAB_L.cols;
+    vector<double> LAB(LAB_L.begin<double>(), LAB_L.end<double>());
+    std::sort(LAB.begin(), LAB.end());
+    double p = Utils::computePercentile(LAB, percentile);
+    LAB_L *= (255.0) / p;
+    LAB_L.convertTo(LAB_L, CV_8U);
+    vector<cv::Mat> tOutput;
+    tOutput.push_back(LAB_L);
+    tOutput.push_back(channels.at(1));
+    tOutput.push_back(channels.at(2));
+    cv::Mat iOutput;
+    cv::merge(tOutput, iOutput);
+    //cv::merge(channels, iOutput);
+    cv::cvtColor(iOutput, output, cv::COLOR_Lab2BGR);
+}
 cv::Mat ColourStainNormalization::Utils::getTissueMask(cv::Mat I, double luminosity_threshold)
 {
     cv::Mat I_LAB;
-    cv::cvtColor(I, I_LAB, cv::COLOR_RGB2Lab);
+    cv::cvtColor(I, I_LAB, cv::COLOR_BGR2Lab);
     vector<cv::Mat> LAB;
     cv::split(I_LAB, LAB);
     cv::Mat LAB_L = LAB[0];
@@ -175,15 +207,15 @@ double ColourStainNormalization::Utils::computePercentile(std::vector<double> so
     // double *sortedArray = sortedVector.data();
     // double val_lower = sortedArray[static_cast<int>(index)];
     // double val_higher = sortedArray[static_cast<int>(index)+1];
-    // double interp = (val_higher-val_lower)*(index-static_cast<int>(index));  
+    // double interp = (val_higher-val_lower)*(index-static_cast<int>(index));
     // return val_lower+interp;
     unsigned int length = sortedVector.size();
     double *sortedArray = sortedVector.data();
-    nc::NdArray<double>test_array(sortedArray, length, false);
-	//test_array.print();
-	//nc::Axis::NONE/ROW/COL
-	nc::NdArray<double> _percentile = nc::percentile(test_array, percentile);
-	//percentile.print();
+    nc::NdArray<double> test_array(sortedArray, length, false);
+    //test_array.print();
+    //nc::Axis::NONE/ROW/COL
+    nc::NdArray<double> _percentile = nc::percentile(test_array, percentile);
+    //percentile.print();
     return _percentile[0];
     // return 0.0;
 }
@@ -222,7 +254,7 @@ void ColourStainNormalization::Utils::computeConcentrationMatrix(Eigen::MatrixXd
     // def lasso(X,D= None,Q = None,q = None,return_reg_path = False,L= -1,lambda1= None,lambda2= 0.,
     //              mode= spams_wrap.PENALTY,pos= False,ols= False,numThreads= -1,
     //              max_length_path= -1,verbose=False,cholesky= False):
-                   
+
     Matrix<double> alpha;
     spa->toFull(alpha);
     m = alpha.m();
@@ -268,6 +300,7 @@ void ColourStainNormalization::Utils::evaluateStainMatrix(Eigen::MatrixXd X, Eig
     Matrix<double> Xmt;
     Xm.transpose(Xmt);
     int K = 2;
+    int batch_size = 8192;
     //int num_threads = 16;
     //#ifdef _OPENMP
     //   num_threads = omp_get_num_procs();
@@ -275,7 +308,7 @@ void ColourStainNormalization::Utils::evaluateStainMatrix(Eigen::MatrixXd X, Eig
     //int batch_size = 256 * (num_threads + 1);
     //cout << "Number of Threads = " << num_threads << endl;
     //cout << "Batch size = " << batch_size << endl;
-    Trainer<double> t(K); // batch_size, num_threads);
+    Trainer<double> t(K, batch_size, NUM_THREADS << 1);
     t.train_fista(Xmt, params);
     Matrix<double> D;
     t.getD(D);

@@ -89,7 +89,7 @@ void ColourStainNormalization::MacenkoNormalizer::computeStainMatrix(cv::Mat ima
     _stainMatrix = HE.rowwise().normalized();
 }
 
-void ColourStainNormalization::MacenkoNormalizer::computeConcentrationMatrix(cv::Mat image, const Eigen::MatrixXd _stainMatrix,Eigen::MatrixXd &_concentrationMatrix)
+void ColourStainNormalization::MacenkoNormalizer::computeConcentrationMatrix(cv::Mat image, const Eigen::MatrixXd _stainMatrix, Eigen::MatrixXd &_concentrationMatrix)
 {
     cv::Mat OD = Utils::convertRGBToOD(image);
     Eigen::MatrixXd C = Utils::convertToEigenFormat(OD);
@@ -98,21 +98,25 @@ void ColourStainNormalization::MacenkoNormalizer::computeConcentrationMatrix(cv:
 
 void ColourStainNormalization::MacenkoNormalizer::fit(cv::Mat target)
 {
+    double _data[6] = {0.5626, 0.7201, 0.4062, 0.2159, 0.8012, 0.5581};
+    stainMatrix = Eigen::Map<Eigen::Matrix<double, 2, 3, Eigen::RowMajor>>(_data);
+    maxCT[0] = 1.9705;
+    maxCT[1] = 1.0308;
     computeStainMatrix(target, stainMatrix);
-    computeConcentrationMatrix(target, stainMatrix,concentrationMatrix);
+    computeConcentrationMatrix(target, stainMatrix, concentrationMatrix);
     //Ready with target stain and computation matrices.
-    int index[2];
-    maxCT[0] = concentrationMatrix.col(0).maxCoeff(&index[0]);
-    maxCT[1] = concentrationMatrix.col(1).maxCoeff(&index[1]);
-    double *data = concentrationMatrix.col(0).data();
-    vector<double> columnVectors(data, data + concentrationMatrix.rows());
-    std::sort(columnVectors.begin(), columnVectors.end());
-    maxCT[0] = Utils::computePercentile(columnVectors, 99);
-    data = concentrationMatrix.col(1).data();
-    columnVectors.erase(columnVectors.begin(), columnVectors.end());
-    vector<double> columnVectors2(data, data + concentrationMatrix.rows());
-    std::sort(columnVectors2.begin(), columnVectors2.end());
-    maxCT[1] = Utils::computePercentile(columnVectors2, 99);
+    // int index[2];
+    // maxCT[0] = concentrationMatrix.col(0).maxCoeff(&index[0]);
+    // maxCT[1] = concentrationMatrix.col(1).maxCoeff(&index[1]);
+    // double *data = concentrationMatrix.col(0).data();
+    // vector<double> columnVectors(data, data + concentrationMatrix.rows());
+    // std::sort(columnVectors.begin(), columnVectors.end());
+    // maxCT[0] = Utils::computePercentile(columnVectors, 99);
+    // data = concentrationMatrix.col(1).data();
+    // columnVectors.erase(columnVectors.begin(), columnVectors.end());
+    // vector<double> columnVectors2(data, data + concentrationMatrix.rows());
+    // std::sort(columnVectors2.begin(), columnVectors2.end());
+    // maxCT[1] = Utils::computePercentile(columnVectors2, 99);
     cv::Mat stainMatrixOD;
     cv::eigen2cv(stainMatrix, stainMatrixOD);
     cv::Mat rgbStainMatrix = Utils::convertODToRGB(stainMatrixOD);
@@ -124,7 +128,6 @@ void ColourStainNormalization::MacenkoNormalizer::transform(cv::Mat source, cv::
     Eigen::MatrixXd _concentrationMatrix;
     computeStainMatrix(source, _stainMatrix);
     computeConcentrationMatrix(source, _stainMatrix, _concentrationMatrix);
-    // cout << _concentrationMatrix << endl;
     double *data = _concentrationMatrix.col(0).data();
     vector<double> columnVectors(data, data + concentrationMatrix.rows());
     std::sort(columnVectors.begin(), columnVectors.end());
@@ -144,7 +147,7 @@ void ColourStainNormalization::MacenkoNormalizer::transform(cv::Mat source, cv::
         _concentrationMatrix(i, 1) *= (maxCT[1] / maxC[1]);
     }
     //Convert to output
-
+    //
     vector<Eigen::MatrixXd> eigens;
     Eigen::MatrixXd _output = _concentrationMatrix * stainMatrix;
     for (int i = 0; i < _output.cols(); i++)
@@ -166,6 +169,4 @@ void ColourStainNormalization::MacenkoNormalizer::transform(cv::Mat source, cv::
     cv::merge(channels, RGB);
     RGB.convertTo(RGB, CV_8UC3);
     output = cv::Mat(RGB.t());
-    // cv::imwrite("Test22.jpg", RGB);
-    //cout << temp.rows() << "x" << temp.cols() << endl;
 }

@@ -6,19 +6,12 @@
 
 using namespace std;
 using namespace ColourStainNormalization;
-template<class Matrix>
-void write_binary(const char* filename, const Matrix& matrix){
-    std::ofstream out(filename, std::ios::out | std::ios::binary | std::ios::trunc);
-    typename Matrix::Index rows=matrix.rows(), cols=matrix.cols();
-    out.write((char*) (&rows), sizeof(typename Matrix::Index));
-    out.write((char*) (&cols), sizeof(typename Matrix::Index));
-    out.write((char*) matrix.data(), rows*cols*sizeof(typename Matrix::Scalar) );
-    out.close();
-}
+
 std::unique_ptr<ColourStainNormalization::VahadaneNormalizer> ColourStainNormalization::VahadaneNormalizer::New()
 {
     return std::make_unique<ColourStainNormalization::VahadaneNormalizer>(ColourStainNormalization::VahadaneNormalizer());
 }
+
 ColourStainNormalization::VahadaneNormalizer ColourStainNormalization::VahadaneNormalizer::init()
 {
     return ColourStainNormalization::VahadaneNormalizer();
@@ -31,8 +24,6 @@ ColourStainNormalization::VahadaneNormalizer::VahadaneNormalizer() : MatrixMetho
 void ColourStainNormalization::VahadaneNormalizer::computeStainMatrix(cv::Mat image, Eigen::MatrixXd &_stainMatrix)
 {
     cv::Mat tissueMask = Utils::getTissueMask(image);
-    // int m = 10, p = 10;
-    // Matrix<double> D2(m, p);
     cv::Mat OD = Utils::convertRGBToOD(image);
     Eigen::MatrixXd C = Utils::convertToEigenFormat(OD);
     Eigen::MatrixXd D = Utils::convertToEigenFormat(tissueMask);
@@ -41,14 +32,14 @@ void ColourStainNormalization::VahadaneNormalizer::computeStainMatrix(cv::Mat im
     Eigen::Index j = 0;
     for (Eigen::Index i = 0; i < C.rows(); ++i)
     {
-         if (non_zeros(i))
-             OD_E.row(j++) = C.row(i);
+        if (non_zeros(i))
+            OD_E.row(j++) = C.row(i);
     }
     // Eigen::MatrixXd res = A("", A.cast<bool>().colwise().any());
     Utils::evaluateStainMatrix(OD_E, _stainMatrix);
 }
 
-void ColourStainNormalization::VahadaneNormalizer::computeConcentrationMatrix(cv::Mat image, const Eigen::MatrixXd _stainMatrix,Eigen::MatrixXd &_concentrationMatrix)
+void ColourStainNormalization::VahadaneNormalizer::computeConcentrationMatrix(cv::Mat image, const Eigen::MatrixXd _stainMatrix, Eigen::MatrixXd &_concentrationMatrix)
 {
     cv::Mat OD = Utils::convertRGBToOD(image);
     Eigen::MatrixXd C = Utils::convertToEigenFormat(OD);
@@ -64,8 +55,17 @@ void ColourStainNormalization::VahadaneNormalizer::computeConcentrationMatrixSou
 
 void ColourStainNormalization::VahadaneNormalizer::fit(cv::Mat target)
 {
-    computeStainMatrix(target, stainMatrix);
-    computeConcentrationMatrix(target, stainMatrix, concentrationMatrix);
+    cv::Mat output = target;
+    Utils::standardiseLuminosity(target, output);
+    computeStainMatrix(output, stainMatrix);
+    // double _data[6] = {0.5626, 0.7201, 0.4062, 0.2159, 0.8012, 0.5581};
+    // Eigen::MatrixXd _stainMatrix = Eigen::Map<Eigen::Matrix<double, 2, 3, Eigen::RowMajor>>(_data);
+    // cout << stainMatrix << endl;
+    // cout << "\n";
+    // cout << _stainMatrix << endl;
+    // maxCT[0] = 1.5705;
+    // maxCT[1] = 0.7308;
+    computeConcentrationMatrix(output, stainMatrix, concentrationMatrix);
     //Ready with target stain and computation matrices.
     int index[2];
     maxCT[0] = concentrationMatrix.col(0).maxCoeff(&index[0]);
@@ -79,7 +79,7 @@ void ColourStainNormalization::VahadaneNormalizer::fit(cv::Mat target)
     vector<double> columnVectors2(data, data + concentrationMatrix.rows());
     std::sort(columnVectors2.begin(), columnVectors2.end());
     maxCT[1] = Utils::computePercentile(columnVectors2, 99);
-    // cerr << "Max CT = " << maxCT[0] << " " << maxCT[1] << endl;
+    cerr << "Max CT = " << maxCT[0] << " " << maxCT[1] << endl;
     cv::Mat stainMatrixOD;
     cv::eigen2cv(stainMatrix, stainMatrixOD);
     cv::Mat rgbStainMatrix = Utils::convertODToRGB(stainMatrixOD);
@@ -87,12 +87,14 @@ void ColourStainNormalization::VahadaneNormalizer::fit(cv::Mat target)
 
 void ColourStainNormalization::VahadaneNormalizer::transform(cv::Mat source, cv::Mat &output)
 {
-    
+
     double maxC[2];
     Eigen::MatrixXd m_stainMatrix;
     Eigen::MatrixXd m_concentrationMatrix;
-    computeStainMatrix(source, m_stainMatrix);
-    computeConcentrationMatrix(source, m_stainMatrix, m_concentrationMatrix);
+    cv::Mat stdoutput;
+    Utils::standardiseLuminosity(source, stdoutput);
+    computeStainMatrix(stdoutput, m_stainMatrix);
+    computeConcentrationMatrix(stdoutput, m_stainMatrix, m_concentrationMatrix);
     int index[2];
     maxC[0] = m_concentrationMatrix.col(0).maxCoeff(&index[0]);
     maxC[1] = m_concentrationMatrix.col(1).maxCoeff(&index[1]);

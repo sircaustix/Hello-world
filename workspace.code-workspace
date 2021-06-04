@@ -12,6 +12,7 @@
 			"*.tcc": "cpp",
 			"numeric": "cpp",
 			"ranges": "cpp"
-		}
+		},
+		"editor.defaultFormatter": "esbenp.prettier-vscode"
 	}
 }

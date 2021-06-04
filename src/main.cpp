@@ -21,12 +21,16 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <string.h>
+#include <unistd.h> 
 using namespace std;
 using namespace ColourStainNormalization;
 #if __cplusplus == 201703L
 #include <filesystem>
 namespace fs = std::filesystem;
 #endif
+extern char *optarg;
+extern int optind;
+extern int optopt;
 /**
  * @brief Method to get the list of files in a directory.
  * @param dirName The directory name.
@@ -60,7 +64,6 @@ struct DataUnit
         outputImage.release();
     }
 };
-static std::optional<DataUnit> test() { return std::nullopt; }
 int main(int argc, char *argv[])
 {
     std::unique_ptr<Normalizer> p_normalizer = VahadaneNormalizer::New();
@@ -80,7 +83,65 @@ int main(int argc, char *argv[])
         exit_with_help();
         return EXIT_SUCCESS;
     }
-    for (int i = 1; i < argc; i++)
+    int opt;
+    while((opt = getopt(argc, argv, ":h:f:l:r:d:o:m:s")) != -1) 
+    {
+        switch (opt)
+        {
+        case 'h':
+            exit_with_help();
+            helpMode = true;
+            break;
+        case 'r':
+            referenceImageName = optarg;
+            cout << "Target"
+                 << " " << referenceImageName << endl;
+            break;
+        case 'd':
+            dirName = optarg;
+            cout << "Input Directory: " << dirName << endl;
+            break;
+        case 'o':
+            outputDir = optarg;
+            cout << "Output Directory:"
+                 << " " << outputDir << endl;
+            break;
+        case 'l':
+            cout << "List: " << optarg << endl;
+            file_list = optarg;
+            break;
+        case 'm':
+            mode = optarg;
+            std::transform(mode.begin(), mode.end(), mode.begin(), ::tolower);
+            cout << "Mode:" << mode << endl;
+            if (mode.compare("m") == 0)
+            {
+                p_normalizer = MacenkoNormalizer::New();
+                outputDir+="_Macenko";
+                break;
+            }
+            if (mode.compare("v") == 0)
+            {
+                p_normalizer = VahadaneNormalizer::New();
+                outputDir+="_Vahadane";
+                break;
+            }
+            if (mode.compare("r") == 0)
+            {
+                p_normalizer = ReinhardNormalizer::New();
+                outputDir+="_Reinhard";
+                break;
+            }
+            invalidMode = true;
+            break;
+        case '?': 
+                printf("unknown option: %c\n", optopt);
+                exit_with_help();
+                helpMode = true;
+                break; 
+        }
+    }
+    /*for (int i = 1; i < argc; i++)
     {
         if (argv[i][0] != '-')
             break;
@@ -139,7 +200,7 @@ int main(int argc, char *argv[])
         default:
             break;
         }
-    }
+    }*/
     if (helpMode)
     {
         return EXIT_SUCCESS;
